@@ -3,13 +3,21 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
-def get_wr_french(some_target):
-    url = f"https://www.wordreference.com/fren/{some_target}"
-
+def get_soup(target_word: str) -> Tag:
+    url = f"https://www.wordreference.com/fren/{target_word}"
     soup = BeautifulSoup(requests.get(url).content, "html.parser")
-
-    # Get article head (entry, pronunciation, audio, etc.)
     article_head = soup.find("div", id="articleHead")
+
+    return article_head
+
+
+def get_wr_french(some_target: str) -> dict[str, str]:
+    # url = f"https://www.wordreference.com/fren/{some_target}"
+
+    # soup = BeautifulSoup(requests.get(url).content, "html.parser")
+
+    # # Get article head (entry, pronunciation, audio, etc.)
+    # article_head = soup.find("div", id="articleHead")
 
     # Get all data tables from WordReference
     tables_all = soup.find_all("table", class_="WRD")
@@ -33,22 +41,22 @@ def get_wr_french(some_target):
         pronunciation = pronunciation_span.text
     else:
         pronunciation = ""
-    # Audio files
-    audio_scripts = [script.string for script in article_head.find_all('script') if "var audioFiles" in script.string]
-    audio_files = []
-    for script_str in audio_scripts:
-        # Extract the array part
-        start = script_str.find('[')
-        end = script_str.find('];') + 1
-        array_str = script_str[start:end]
+    # # Audio files
+    # audio_scripts = [script.string for script in article_head.find_all('script') if "var audioFiles" in script.string]
+    # audio_files = []
+    # for script_str in audio_scripts:
+    #     # Extract the array part
+    #     start = script_str.find('[')
+    #     end = script_str.find('];') + 1
+    #     array_str = script_str[start:end]
 
-        # Convert to Python list
-        audio_file = ast.literal_eval(array_str)
-        for file in audio_file:
-            head = 'https://www.wordreference.com'
-            audio_file = f'{head}{file}'
-            if audio_file not in audio_files:
-                audio_files.append(audio_file)
+    #     # Convert to Python list
+    #     audio_file = ast.literal_eval(array_str)
+    #     for file in audio_file:
+    #         head = 'https://www.wordreference.com'
+    #         audio_file = f'{head}{file}'
+    #         if audio_file not in audio_files:
+    #             audio_files.append(audio_file)
     # Inflections
     inflections = {}
     inflections_div = soup.find('div', class_="inflectionsSection")
@@ -140,8 +148,28 @@ def get_wr_french(some_target):
         }
         return result
     else:
-        return None
+        return {}
     
+
+def get_audio(article_head: str) -> list[str]:
+    # Audio files
+    audio_scripts = [script.string for script in article_head.find_all('script') if "var audioFiles" in script.string]
+    audio_files = []
+    for script_str in audio_scripts:
+        # Extract the array part
+        start = script_str.find('[')
+        end = script_str.find('];') + 1
+        array_str = script_str[start:end]
+
+        # Convert to Python list
+        audio_file = ast.literal_eval(array_str)
+        for file in audio_file:
+            head = 'https://www.wordreference.com'
+            audio_file = f'{head}{file}'
+            if audio_file not in audio_files:
+                audio_files.append(audio_file)
+        
+
 data = get_wr_french('pomme')
 
 print(data)
