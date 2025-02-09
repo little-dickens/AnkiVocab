@@ -142,3 +142,6 @@ def get_wr_french(some_target):
     else:
         return None
     
+data = get_wr_french('pomme')
+
+print(data)
