@@ -115,7 +115,7 @@ class WordReference:
                     audio_files.append(full_audio_file)
         return audio_files
 
-    def get_definitions(self) -> dict[str, str]:
+    def get_definitions(self) -> dict[str, list[str]]:
         '''Fetches definitions from WordReference, returns dict mapping target_word str to enumerated definition strings'''
         def_dict = {}
 
@@ -159,7 +159,7 @@ class WordReference:
             else:
                 def_dict_enum[target_word].append(def_str)
 
-        return def_dict_enum
+        return def_dict
     
     def get_examples(self) -> list[str]:
         '''Fetches example sentences from WordReference, returns a list of strings'''
@@ -241,7 +241,6 @@ class Wiktionnaire:
         """Fetches the genders."""
         # Pronunciation and Gender
         genders = []
-
         if self.p_pron:
             for p in self.p_pron:
                 gender_span = p.find('span', class_="ligne-de-forme")
@@ -256,7 +255,7 @@ class Wiktionnaire:
                         genders.append(gender)
         return genders
 
-    def get_definitions(self) -> dict[str, str]:   
+    def get_definitions(self) -> dict[str, list[str]]:   
         '''Fetches the definitions'''
         def_dict = {}
         ''' 
@@ -284,16 +283,14 @@ class Wiktionnaire:
                     # Filter out the example sentences (contained in <span> and <ul> tags)
                     if item.name is None or item.name not in ('span', 'ul'):
                         if isinstance(item, Tag):
-                            def_str += item.get_text()
+                            def_str += item.get_text().replace('\n',' ')
                         else:
-                            def_str += item
+                            def_str += item.replace('\n',' ')
                 if def_str:
                     def_list.append(def_str.strip())
             def_dict[f'''{self.target_word} {genders[li_list_idx]}'''] = def_list
-
         # Now we want to enumerate the definitions by each word group
         def_dict_enum = {}
-
         for target_word, list_of_defs in def_dict.items():
             def_str = ''
             for idx, definition in enumerate(list_of_defs, start=1):
@@ -301,16 +298,16 @@ class Wiktionnaire:
                 if idx < len(list_of_defs):
                     def_str = def_str[:-1] + '; '
                 def_dict_enum[target_word] = def_str
-        return def_dict_enum
+        return def_dict
 
 
 pp = pprint.PrettyPrinter(indent=4)
 
-pendule_wr = WordReference('pendule')
-pp.pprint(pendule_wr.get_definitions())
+# pendule_wr = WordReference('pendule')
+# pp.pprint(pendule_wr.get_definitions())
 
-pendule_wikt = Wiktionnaire('pendule')
-pp.pprint(pendule_wikt.get_definitions())
+pendule_wikt = Wiktionnaire('baiser volé')
+print(pendule_wikt.get_definitions())
 
 # target = 'pomme'
 # soup = get_soup(target)
