@@ -54,12 +54,14 @@ class WordReference:
                 tr_dict[id].append(tr)
         return tr_dict
 
-    def get_wr_pronunciations(self) -> str:
+    def get_pronunciations(self) -> str:
         '''Fetches pronunciations from WordReference'''
+        if not self.article_head:
+            return None
         pronunciation_span = self.article_head.find('span', class_='pronWR')
         return pronunciation_span.text if pronunciation_span.text else None
 
-    def get_wr_inflections(self) -> dict[str, list[str]]:
+    def get_inflections(self) -> dict[str, list[str]]:
         '''Fetches inflections (primarily conjugations but listed in the html as inflections) from WordReference'''
         '''and returns a dict mapping the infinitive str to a list of conjugation descriptions'''
         inflections = {}
@@ -95,7 +97,7 @@ class WordReference:
                         inflections[infinitive] = conjugations
         return inflections
 
-    def get_wr_audio(self) -> list[str]:
+    def get_audio(self) -> list[str]:
         '''Fetches list of audio url strs from WordReference'''
         audio_scripts = [script.string for script in self.article_head.find_all('script') if "var audioFiles" in script.string]
         audio_files = []
@@ -104,18 +106,15 @@ class WordReference:
             start = script_str.find('[')
             end = script_str.find('];') + 1
             array_str = script_str[start:end]
-
             # Convert to Python list
             audio_file = ast.literal_eval(array_str)
             for file in audio_file:
-                head = 'https://www.wordreference.com'
-                audio_file = f'{head}{file}'
-                if audio_file not in audio_files:
-                    audio_files.append(audio_file)
-        
+                full_audio_file = f'''https://www.wordreference.com{file}'''
+                if full_audio_file not in audio_files:
+                    audio_files.append(full_audio_file)
         return audio_files
 
-    def get_wr_definitions(self) -> dict[str, str]:
+    def get_definitions(self) -> dict[str, str]:
         '''Fetches definitions from WordReference, returns dict mapping target_word str to enumerated definition strings'''
         def_dict = {}
 
@@ -128,14 +127,13 @@ class WordReference:
                 toWrd = ""
                 tds = tr.find_all('td')
                 for td in tds:
-                    if td.attrs:
-                        if 'FrWrd' in td['class']:
-                            frWrd += td.strong.text.replace('⇒', '')
-                            pos += td.em.text
-                        if "To2" in td['class']:
-                            to2 += f"({td.i.string})"
-                        if "ToWrd" in td['class']:
-                            toWrd += td.contents[0].strip()
+                    if 'FrWrd' in td.get('class', []):
+                        frWrd += td.strong.text.replace('⇒', '')
+                        pos += td.em.text     
+                    if 'To2' in td.get('class', []):
+                        to2 += f"({td.i.string})"
+                    if 'ToWrd' in td.get('class', []):   
+                        toWrd += td.contents[0].strip()   
                 definition = f"{to2} {toWrd}"
                 definition = definition.strip()
                 if definition:
@@ -161,7 +159,7 @@ class WordReference:
 
         return def_dict_enum
     
-    def get_wr_example_sentences(self) -> list[str]:
+    def get_examples(self) -> list[str]:
         '''Fetches example sentences from WordReference, returns a list of strings'''
         example_sentences = []
 
@@ -169,18 +167,17 @@ class WordReference:
             for tr in tr_list:
                 tds = tr.find_all('td')
                 for td in tds:
-                    if td.attrs:
-                        if "FrEx" in td['class']:
-                            example_sentences.append(td.get_text())
+                    if 'FrEx' in td.get('class', []):   
+                        example_sentences.append(td.get_text())  
         return example_sentences
     
     def to_dict(self) -> dict:
         '''Aggregate all collected data into a dictionary'''
-        inflections = self.get_wr_inflections()
-        examples = self.get_wr_example_sentences()
-        audio = self.get_wr_audio()
-        pronunciations = self.get_wr_pronunciations()
-        definitions = self.get_wr_definitions()
+        inflections = self.get_inflections()
+        examples = self.get_examples()
+        audio = self.get_audio()
+        pronunciations = self.get_pronunciations()
+        definitions = self.get_definitions()
 
         # Aggregate all collected data into a dictionary
         return {
