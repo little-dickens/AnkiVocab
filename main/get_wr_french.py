@@ -3,6 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from dataclasses import dataclass
+import pprint
 
 @dataclass
 class WordReference:
@@ -11,20 +12,21 @@ class WordReference:
 
     def __post_init__(self):
         self.soup = self._get_soup()
-        self.head = self._get_wr_head()
+        self.article_head = self._get_article_head()
         self.tr_dict = self._get_tr_dict()
 
     def _get_soup(self) -> BeautifulSoup:
+        """Fetches the webpage for the target word and returns a BeautifulSoup object."""
         url = f"https://www.wordreference.com/fren/{self.target_word}"
         self.soup = BeautifulSoup(requests.get(url).content, "html.parser")
         return self.soup
     
-    def _get_wr_head(self) -> str:
-        header_elem = self.soup.find('h1', class_='headerWord') if self.soup else None
-        return header_elem.text if header_elem else None
-    
+    def _get_article_head(self) -> Tag:
+        """Fetches the articleHead for the target word and returns a Tag object."""
+        return self.soup.find("div", id="articleHead") if self.soup else None
+
     def _get_tr_dict(self) -> dict[str, list[Tag]]:
-            # Get all data tables from WordReference
+        """Fetches the data tables for the target word and returns a dict mapping strings to lists of Tags."""
         tables_all = self.soup.find_all("table", class_="WRD")
 
         # Filter out the "Formes composées"
@@ -53,12 +55,13 @@ class WordReference:
         return tr_dict
 
     def get_wr_pronunciations(self) -> str:
-        # Pronunciation
-        pronunciation_span = self.head.find('span', class_='pronWR')
+        '''Fetches pronunciations from WordReference'''
+        pronunciation_span = self.article_head.find('span', class_='pronWR')
         return pronunciation_span.text if pronunciation_span.text else None
 
-    def get_wr_inflections(self) -> str:
-        # Inflections
+    def get_wr_inflections(self) -> dict[str, list[str]]:
+        '''Fetches inflections (primarily conjugations but listed in the html as inflections) from WordReference'''
+        '''and returns a dict mapping the infinitive str to a list of conjugation descriptions'''
         inflections = {}
         inflections_div = self.soup.find('div', class_="inflectionsSection")
         if inflections_div:
@@ -93,8 +96,8 @@ class WordReference:
         return inflections
 
     def get_wr_audio(self) -> list[str]:
-        # Audio files
-        audio_scripts = [script.string for script in self.soup.find_all('script') if "var audioFiles" in script.string]
+        '''Fetches list of audio url strs from WordReference'''
+        audio_scripts = [script.string for script in self.article_head.find_all('script') if "var audioFiles" in script.string]
         audio_files = []
         for script_str in audio_scripts:
             # Extract the array part
@@ -110,13 +113,13 @@ class WordReference:
                 if audio_file not in audio_files:
                     audio_files.append(audio_file)
         
-        return self.audio_files
+        return audio_files
 
     def get_wr_definitions(self) -> dict[str, str]:
-        # Get word definitions
+        '''Fetches definitions from WordReference, returns dict mapping target_word str to enumerated definition strings'''
         def_dict = {}
 
-        for id, tr_list in self.tr_dict.items():
+        for tr_list in self.tr_dict.values():
             frWrd = ""
             pos = ""
             definitions = []
@@ -144,13 +147,25 @@ class WordReference:
                     def_dict[entry] = [definitions]
                 else:
                     def_dict[entry].append(definitions)
-        return def_dict
+        def_dict_enum = {}
+        for target_word, list_of_defs in def_dict.items():
+            def_str = ""
+            for idx, definition in enumerate(list_of_defs, start=1):
+                def_str += f'''{idx}. {", ".join(definition)}'''
+                if idx < len(list_of_defs):
+                    def_str += '; '
+            if target_word not in def_dict_enum:
+                def_dict_enum[target_word] = def_str
+            else:
+                def_dict_enum[target_word].append(def_str)
+
+        return def_dict_enum
     
     def get_wr_example_sentences(self) -> list[str]:
-        # Get word definitions
+        '''Fetches example sentences from WordReference, returns a list of strings'''
         example_sentences = []
 
-        for id, tr_list in self.tr_dict.items():
+        for tr_list in self.tr_dict.values():
             for tr in tr_list:
                 tds = tr.find_all('td')
                 for td in tds:
@@ -160,6 +175,7 @@ class WordReference:
         return example_sentences
     
     def to_dict(self) -> dict:
+        '''Aggregate all collected data into a dictionary'''
         inflections = self.get_wr_inflections()
         examples = self.get_wr_example_sentences()
         audio = self.get_wr_audio()
@@ -174,12 +190,23 @@ class WordReference:
             "inflections": inflections,
             "examples": examples,
             "audio": audio
-            # Add other key-value pairs for additional data
         }
 
 
+@dataclass
+class Wiktionnaire:
+    # target_word is the word that we want to define 
+    target_word: str
+
+    def __post_init__(self):
+        self.soup = self._get_soup()
+        self.article_head = self._get_article_head()
+        self.tr_dict = self._get_tr_dict()
+
+
+pp = pprint.PrettyPrinter(indent=4)
 pomme = WordReference('pomme')
-print(pomme.to_dict())
+pp.pprint(pomme.to_dict())
 
 # target = 'pomme'
 # soup = get_soup(target)
