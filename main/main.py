@@ -3,6 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from dataclasses import dataclass
+from itertools import chain
 import pprint
 
 @dataclass
@@ -189,7 +190,6 @@ class WordReference:
             "audio": audio
         }
 
-
 @dataclass
 class Wiktionnaire:
     # target_word is the word that we want to define 
@@ -198,12 +198,73 @@ class Wiktionnaire:
     def __post_init__(self):
         self.soup = self._get_soup()
         self.article_head = self._get_article_head()
-        self.tr_dict = self._get_tr_dict()
+        self.p_pron = self._get_p_pron()
+
+    def _get_soup(self) -> BeautifulSoup:
+        url = f"https://fr.wiktionary.org/wiki/{self.target_word}"
+        self.soup = BeautifulSoup(requests.get(url).content, "html.parser")
+        return self.soup
+    
+    def _get_article_head(self) -> Tag:
+        """Fetches the articleHead for the target word and returns a Tag object."""
+        return self.soup.find('div', class_='mw-content-ltr mw-parser-output') if self.soup else None
+    
+    def _get_p_pron(self) -> list[Tag]:
+        """Fetches the p_pron spans, returns a list of bs4 Tags."""
+        p_all = self.article_head.find_all('p')
+        # Not all p tags contain both the pronunciation and gender; filter if missing
+        if p_all:
+            p_pron = []
+            for p in p_all:
+                children = p.children
+                values = list(chain(*([c.attrs.values() for c in children if isinstance(c, Tag)])))
+                if values == ['/wiki/Annexe:Prononciation/fran%C3%A7ais', 'Annexe:Prononciation/français', ['ligne-de-forme']]:
+                    p_pron.append(p)
+        return p_pron
+
+    def get_pronunciations(self) -> list:
+        """Fetches the pronunciations."""
+        # Pronunciation
+        pronunciations = []
+
+        if self.p_pron:
+            for p in self.p_pron:
+                pronunciation_span = p.find('span', title="Prononciation API")
+                if pronunciation_span:
+                    pronunciation = f"[{pronunciation_span.text[1:-1].replace('.','')}]"
+                    if pronunciation not in pronunciations:
+                        pronunciations.append(pronunciation)
+        return pronunciations
+
+    def get_genders(self) -> list:
+        """Fetches the genders."""
+        # Pronunciation and Gender
+        genders = []
+
+        if self.p_pron:
+            for p in self.p_pron:
+                gender_span = p.find('span', class_="ligne-de-forme")
+                if gender_span:
+                    gender_dict = {
+                        'féminin': '(nf)',
+                        'masculin': '(nm)',
+                        'masculin et féminin identiques': '(nmf)',
+                    }
+                    gender = gender_dict[gender_span.text]
+                    if gender not in genders:
+                        genders.append(gender)
+        return genders
+
+    def get_definitions(self) -> list:
+        # Definitions
+        for h in self.article_head:
+            print(h.find_next())
+
 
 
 pp = pprint.PrettyPrinter(indent=4)
-pomme = WordReference('pomme')
-pp.pprint(pomme.to_dict())
+pendule = Wiktionnaire('pendule')
+pp.pprint(pendule.get_definitions())
 
 # target = 'pomme'
 # soup = get_soup(target)
