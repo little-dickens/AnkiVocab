@@ -146,6 +146,7 @@ class WordReference:
                     def_dict[entry] = [definitions]
                 else:
                     def_dict[entry].append(definitions)
+        # Now we want to enumerate the definitions by each word group
         def_dict_enum = {}
         for target_word, list_of_defs in def_dict.items():
             def_str = ""
@@ -222,7 +223,7 @@ class Wiktionnaire:
                     p_pron.append(p)
         return p_pron
 
-    def get_pronunciations(self) -> list:
+    def get_pronunciations(self) -> list[str]:
         """Fetches the pronunciations."""
         # Pronunciation
         pronunciations = []
@@ -236,7 +237,7 @@ class Wiktionnaire:
                         pronunciations.append(pronunciation)
         return pronunciations
 
-    def get_genders(self) -> list:
+    def get_genders(self) -> list[str]:
         """Fetches the genders."""
         # Pronunciation and Gender
         genders = []
@@ -255,16 +256,61 @@ class Wiktionnaire:
                         genders.append(gender)
         return genders
 
-    def get_definitions(self) -> list:
-        # Definitions
-        for h in self.article_head:
-            print(h.find_next())
+    def get_definitions(self) -> dict[str, str]:   
+        '''Fetches the definitions'''
+        def_dict = {}
+        ''' 
+        <ol> is the master tag for definitions, but also supplemental info like translations, composite forms, etc.
+        We only want the definitions of each word, whose <ol> tags appear at the top. 
+        Normally, we'd just take the first <ol> tag, but some words like 'pendule' have different genders and thus different meanings (lets call these 'word groups').
+        So, get the length of the genders list and then use that to splice the ol_all list.
+        '''
+        genders = self.get_genders()
+        definition_group_count = len(genders)
+        ol_all = self.article_head.find_all('ol')[:definition_group_count]
+        list_of_li_groups = []
+        '''
+        We want to group the <li> tags by their <ol> parent, each occurence of which should be a unique word group (i.e. [<tags> for 'pendule (nm)', <tags> for 'pendule (nf)'])
+        That way, we can keep the definitions of each word separate
+        '''
+        for ol in ol_all:
+            list_of_li_groups.append(ol.find_all('li'))
+        for li_list_idx, li_list in enumerate(list_of_li_groups):
+            def_list = []
+            for li in li_list:
+                def_str = ""
+                li_contents = li.contents
+                for item in li_contents:
+                    # Filter out the example sentences (contained in <span> and <ul> tags)
+                    if item.name is None or item.name not in ('span', 'ul'):
+                        if isinstance(item, Tag):
+                            def_str += item.get_text()
+                        else:
+                            def_str += item
+                if def_str:
+                    def_list.append(def_str.strip())
+            def_dict[f'''{self.target_word} {genders[li_list_idx]}'''] = def_list
 
+        # Now we want to enumerate the definitions by each word group
+        def_dict_enum = {}
+
+        for target_word, list_of_defs in def_dict.items():
+            def_str = ''
+            for idx, definition in enumerate(list_of_defs, start=1):
+                def_str += f'''{idx}. {definition}'''
+                if idx < len(list_of_defs):
+                    def_str = def_str[:-1] + '; '
+                def_dict_enum[target_word] = def_str
+        return def_dict_enum
 
 
 pp = pprint.PrettyPrinter(indent=4)
-pendule = Wiktionnaire('pendule')
-pp.pprint(pendule.get_definitions())
+
+pendule_wr = WordReference('pendule')
+pp.pprint(pendule_wr.get_definitions())
+
+pendule_wikt = Wiktionnaire('pendule')
+pp.pprint(pendule_wikt.get_definitions())
 
 # target = 'pomme'
 # soup = get_soup(target)
