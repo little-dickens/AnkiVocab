@@ -5,6 +5,7 @@ from bs4.element import Tag
 from dataclasses import dataclass
 from itertools import chain
 import pprint
+import json
 
 @dataclass
 class WordReference:
@@ -219,8 +220,13 @@ class Wiktionnaire:
             for p in p_all:
                 children = p.children
                 values = list(chain(*([c.attrs.values() for c in children if isinstance(c, Tag)])))
-                if values == ['/wiki/Annexe:Prononciation/fran%C3%A7ais', 'Annexe:Prononciation/français', ['ligne-de-forme']]:
-                    p_pron.append(p)
+                parts = values[-1]
+                parts_json = json.loads(parts)
+                params = parts_json['parts'][0]['template']['params']
+                if '1' in params:
+                    p_pron.append(params['1']['wt'])
+                # if values == ['/wiki/Annexe:Prononciation/fran%C3%A7ais', 'Annexe:Prononciation/français', ['ligne-de-forme']]:
+                    # p_pron.append(p)
         return p_pron
 
     def get_pronunciations(self) -> list[str]:
@@ -306,7 +312,7 @@ pp = pprint.PrettyPrinter(indent=4)
 # pendule_wr = WordReference('pendule')
 # pp.pprint(pendule_wr.get_definitions())
 
-pendule_wikt = Wiktionnaire('baiser volé')
+pendule_wikt = Wiktionnaire('pendule')
 print(pendule_wikt.get_definitions())
 
 # target = 'pomme'
