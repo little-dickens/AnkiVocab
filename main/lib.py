@@ -211,9 +211,10 @@ class Wiktionnaire:
         """Fetches the articleHead for the target word and returns a Tag object."""
         return self.soup.find('div', class_='mw-content-ltr mw-parser-output') if self.soup else None
     
-    def _get_p_pron(self) -> list[Tag]:
-        """Fetches the p_pron spans, returns a list of bs4 Tags."""
+    def _get_p_pron(self) -> list[str]:
+        """Fetches the p_pron spans and parses pronunciation, returning as a list of strs"""
         p_all = self.article_head.find_all('p')
+        pronunciations = []
         # Not all p tags contain both the pronunciation and gender; filter if missing
         if p_all:
             p_pron = []
@@ -223,8 +224,9 @@ class Wiktionnaire:
                 parts = values[-1]
                 parts_json = json.loads(parts)
                 params = parts_json['parts'][0]['template']['params']
-                if '1' in params:
-                    p_pron.append(params['1']['wt'])
+                p_pron.append(p)
+                # if '1' in params:
+                #     pronunciations.append(params['1']['wt'])
                 # if values == ['/wiki/Annexe:Prononciation/fran%C3%A7ais', 'Annexe:Prononciation/français', ['ligne-de-forme']]:
                     # p_pron.append(p)
         return p_pron
@@ -236,6 +238,7 @@ class Wiktionnaire:
 
         if self.p_pron:
             for p in self.p_pron:
+                print(p)
                 pronunciation_span = p.find('span', title="Prononciation API")
                 if pronunciation_span:
                     pronunciation = f"[{pronunciation_span.text[1:-1].replace('.','')}]"
@@ -251,14 +254,17 @@ class Wiktionnaire:
             for p in self.p_pron:
                 gender_span = p.find('span', class_="ligne-de-forme")
                 if gender_span:
+                    gender_typeof = gender_span.find('i').get_text()
+
                     gender_dict = {
                         'féminin': '(nf)',
                         'masculin': '(nm)',
                         'masculin et féminin identiques': '(nmf)',
                     }
-                    gender = gender_dict[gender_span.text]
-                    if gender not in genders:
-                        genders.append(gender)
+                    if gender_typeof in gender_dict:
+                        gender = gender_dict[gender_span.find('i').get_text()]
+                        if gender not in genders:
+                            genders.append(gender)
         return genders
 
     def get_definitions(self) -> dict[str, list[str]]:   
@@ -313,7 +319,7 @@ pp = pprint.PrettyPrinter(indent=4)
 # pp.pprint(pendule_wr.get_definitions())
 
 pendule_wikt = Wiktionnaire('pendule')
-print(pendule_wikt.get_definitions())
+pendule_wikt.get_definitions()
 
 # target = 'pomme'
 # soup = get_soup(target)
