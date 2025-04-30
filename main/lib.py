@@ -533,10 +533,10 @@ class Wiktionnaire:
             "audio": audio
         }
 
-pp = pprint.PrettyPrinter(indent=4)
+# pp = pprint.PrettyPrinter(indent=4)
 
-pendule_wr = Wiktionnaire('pendule')
-pp.pprint(pendule_wr.to_dict())
+# pendule_wr = Wiktionnaire('pendule')
+# pp.pprint(pendule_wr.to_dict())
 
 # pomme = WordReference('pendule')
 # pp.pprint(pomme.to_dict())
