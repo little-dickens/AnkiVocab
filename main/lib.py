@@ -238,12 +238,13 @@ class Wiktionnaire:
 
         if self.p_pron:
             for p in self.p_pron:
-                print(p)
-                pronunciation_span = p.find('span', title="Prononciation API")
-                if pronunciation_span:
-                    pronunciation = f"[{pronunciation_span.text[1:-1].replace('.','')}]"
-                    if pronunciation not in pronunciations:
-                        pronunciations.append(pronunciation)
+                children = p.children
+                values = list(chain(*([c.attrs.values() for c in children if isinstance(c, Tag)])))
+                parts = values[-1]
+                parts_json = json.loads(parts)
+                params = parts_json['parts'][0]['template']['params']
+                if '1' in params:
+                    pronunciations.append(params['1']['wt'])
         return pronunciations
 
     def get_genders(self) -> list[str]:
@@ -266,6 +267,20 @@ class Wiktionnaire:
                         if gender not in genders:
                             genders.append(gender)
         return genders
+    
+    def get_audio(self) -> list[str]:
+        '''Fetches list of audio url strs from Wiktionnaire'''
+        # audio_elements = self.soup.find_all('span', class_='audio-file')
+        audio_elements = self.soup.find_all('audio', class_='mw-file-element')
+
+        audio_files = []
+
+        for audio_element in audio_elements:
+            link = audio_element['resource']
+            while link.startswith('/'):
+                link = link[1:]
+            audio_files.append(link)
+        return audio_files
 
     def get_definitions(self) -> dict[str, list[str]]:   
         '''Fetches the definitions'''
@@ -313,13 +328,73 @@ class Wiktionnaire:
         return def_dict
 
 
-pp = pprint.PrettyPrinter(indent=4)
+    def get_examples(self) -> dict[str, list[str]]:   
+        '''Fetches the definitions'''
+        example_dict = {}
+        ''' 
+        <ol> is the master tag for definitions, but also supplemental info like translations, composite forms, etc.
+        We only want the definitions of each word, whose <ol> tags appear at the top. 
+        Normally, we'd just take the first <ol> tag, but some words like 'pendule' have different genders and thus different meanings (lets call these 'word groups').
+        So, get the length of the genders list and then use that to splice the ol_all list.
+        '''
+        genders = self.get_genders()
+        definition_group_count = len(genders)
+        ol_all = self.article_head.find_all('ol')[:definition_group_count]
+        list_of_li_groups = []
+        '''
+        We want to group the <li> tags by their <ol> parent, each occurence of which should be a unique word group (i.e. [<tags> for 'pendule (nm)', <tags> for 'pendule (nf)'])
+        That way, we can keep the definitions of each word separate
+        '''
+        for ol in ol_all:
+            list_of_li_groups.append(ol.find_all('li'))
+        for li_list_idx, li_list in enumerate(list_of_li_groups):
+            example_list = []
+            for li in li_list:
+                example_str = ""
+                li_contents = li.contents
+                for item in li_contents:
+                    # Filter out the example sentences (contained in <span> and <ul> tags)
+                    if item.name in ('span', 'ul'):
+                        example_str += item.get_text().replace('\xa0','')
+                if example_str:
+                    example_list.append(example_str.strip())
+            example_dict[f'''{self.target_word} {genders[li_list_idx]}'''] = example_list
+        # Now we want to enumerate the definitions by each word group
+        example_dict_enum = {}
+        for target_word, list_of_defs in example_dict.items():
+            example_str = ''
+            for idx, definition in enumerate(list_of_defs, start=1):
+                example_str += f'''{idx}. {definition}'''
+                if idx < len(list_of_defs):
+                    example_str = example_str[:-1] + '; '
+                example_dict_enum[target_word] = example_str
+        return example_dict
+    
+    def to_dict(self) -> dict:
+        '''Aggregate all collected data into a dictionary'''
+        # inflections = self.get_inflections()
+        examples = self.get_examples()
+        audio = self.get_audio()
+        pronunciations = self.get_pronunciations()
+        definitions = self.get_definitions()
+
+        # Aggregate all collected data into a dictionary
+        return {
+            "target_word": self.target_word,
+            "definitions": definitions,
+            "pronunciations": pronunciations,
+            # "inflections": inflections,
+            "examples": examples,
+            "audio": audio
+        }
+
+# pp = pprint.PrettyPrinter(indent=4)
 
 # pendule_wr = WordReference('pendule')
 # pp.pprint(pendule_wr.get_definitions())
 
-pendule_wikt = Wiktionnaire('pendule')
-pendule_wikt.get_definitions()
+# pendule_wikt = Wiktionnaire('pendule')
+# pp.pprint(pendule_wikt.to_dict())
 
 # target = 'pomme'
 # soup = get_soup(target)
