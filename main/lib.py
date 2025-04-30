@@ -1,7 +1,7 @@
 import ast
 import requests
 from bs4 import BeautifulSoup
-from bs4.element import Tag
+from bs4.element import Tag, NavigableString
 from dataclasses import dataclass
 from itertools import chain
 import pprint
@@ -68,9 +68,12 @@ class WordReference:
     def get_pronunciations(self) -> str:
         '''Fetches pronunciations from WordReference'''
         if not self.article_head:
-            return None
+            return ""
         pronunciation_span = self.article_head.find('span', class_='pronWR')
-        return pronunciation_span.text if pronunciation_span.text else None
+        if pronunciation_span is None:
+            return ""
+        else: 
+            return pronunciation_span.text
 
     def get_inflections(self) -> dict[str, list[str]]:
         '''Fetches inflections (primarily conjugations but listed in the html as inflections) from WordReference'''
@@ -125,52 +128,172 @@ class WordReference:
                     audio_files.append(full_audio_file)
         return audio_files
 
-    def get_definitions(self) -> dict[str, list[str]]:
-        '''Fetches definitions from WordReference, returns dict mapping target_word str to enumerated definition strings'''
-        def_dict = {}
+    # def get_definitions(self) -> dict[str, list[str]]:
+    #     '''Fetches definitions from WordReference, returns dict mapping target_word str to enumerated definition strings'''
+    #     def_dict = {}
 
+    #     for tr_list in self.tr_dict.values():
+    #         frWrd = ""
+    #         pos = ""
+    #         definitions = []
+    #         for tr in tr_list:
+    #             to2 = ""
+    #             toWrd = ""
+    #             tds = tr.find_all('td')
+    #             for td in tds:
+    #                 if 'FrWrd' in td.get('class', []):
+    #                     frWrd += td.strong.text.replace('⇒', '')
+    #                     pos += td.em.text
+    #                 if td.span:
+    #                     if 'dsense' in td.span.get('class', []):
+    #                         to2 += td.span.get_text()
+    #                 if 'ToWrd' in td.get('class', []):   
+    #                     toWrd += td.contents[0].strip()
+    #             definition = f"{to2} {toWrd}"
+    #             print(definition)
+    #             definition = definition.strip()
+    #             if definition:
+    #                 definitions.append(definition)
+    #             # Make sure the definition matches the target
+    #             if frWrd == self.target_word:
+    #                 entry = f'{frWrd} ({pos})'
+    #                 if entry not in def_dict:
+    #                     def_dict[entry] = [definitions]
+    #                 else:
+    #                     def_dict[entry].append(definitions)
+    #     # Now we want to enumerate the definitions by each word group
+    #     def_dict_enum = {}
+    #     for target_word, list_of_defs in def_dict.items():
+    #         def_str = ""
+    #         for idx, definition in enumerate(list_of_defs, start=1):
+    #             def_str += f'''{idx}. {", ".join(definition)}'''
+    #             if idx < len(list_of_defs):
+    #                 def_str += '; '
+    #         if target_word not in def_dict_enum:
+    #             def_dict_enum[target_word] = def_str
+    #         else:
+    #             def_dict_enum[target_word].append(def_str)
+
+    #     return def_dict
+
+    # def get_definitions(self) -> dict[str, str]:
+    #     raw_defs: dict[str, list[str]] = {}
+
+    #     for tr_list in self.tr_dict.values():
+    #         # Build the key from the first row: "word (pos)"
+    #         first = tr_list[0]
+    #         fr_td = first.find("td", class_="FrWrd")
+    #         if not fr_td or not fr_td.strong or not fr_td.em:
+    #             continue
+    #         key = f"{fr_td.strong.text.strip()} ({fr_td.em.text.strip()})"
+    #         raw_defs.setdefault(key, [])
+
+    #         # Extract each sense/gloss
+    #         for tr in tr_list:
+    #             tds = tr.find_all("td")
+    #             if len(tds) < 3:
+    #                 continue
+
+    #             # Only look in the *middle* cell for a dsense
+    #             dsense_span = tds[1].find("span", class_="dsense")
+    #             if dsense_span:
+    #                 sense = dsense_span.get_text(strip=True).strip("()")
+    #                 prefix = f"({sense}) "
+    #             else:
+    #                 prefix = ""
+
+    #             # Grab the very first text node from the 3rd cell
+    #             gloss = None
+    #             for node in tds[2].contents:
+    #                 if isinstance(node, NavigableString) and node.strip():
+    #                     gloss = node.strip()
+    #                     break
+    #             if not gloss:
+    #                 continue
+
+    #             # Remove any trailing ⇒
+    #             if "⇒" in gloss:
+    #                 gloss = gloss.split("⇒", 1)[0].strip()
+
+    #             raw_defs[key].append(f"{prefix}{gloss}")
+
+    #     if not raw_defs:
+    #         raise DefinitionNotFoundError("Definition does not exist")
+
+    #     # Dedupe and enumerate
+    #     final_defs: dict[str, str] = {}
+    #     for key, senses in raw_defs.items():
+    #         seen = []
+    #         for s in senses:
+    #             if s not in seen:
+    #                 seen.append(s)
+    #         enumerated = "; ".join(f"{i+1}. {s}" for i, s in enumerate(seen))
+    #         final_defs[key] = enumerated
+
+    #     return final_defs
+
+    def get_definitions(self) -> dict[str, str] | str:
+        """
+        If there are real definitions, returns a dict mapping
+        “word (pos)” → enumerated senses.
+        If the page is only an inflection (e.g. “eusse”), returns "".
+        Otherwise raises DefinitionNotFoundError.
+        """
+        # detect an inflection‐only page
+        is_inflection_only = bool(self.soup.find("div", class_="otherWRD"))
+
+        # 1) scrape all the <tr> groups into raw_defs
+        raw_defs: dict[str, list[str]] = {}
         for tr_list in self.tr_dict.values():
-            frWrd = ""
-            pos = ""
-            definitions = []
-            for tr in tr_list:
-                to2 = ""
-                toWrd = ""
-                tds = tr.find_all('td')
-                for td in tds:
-                    if 'FrWrd' in td.get('class', []):
-                        frWrd += td.strong.text.replace('⇒', '')
-                        pos += td.em.text     
-                    if 'To2' in td.get('class', []):
-                        to2 += f"({td.i.string})"
-                    if 'ToWrd' in td.get('class', []):   
-                        toWrd += td.contents[0].strip()   
-                definition = f"{to2} {toWrd}"
-                definition = definition.strip()
-                if definition:
-                    definitions.append(definition)
-            # Make sure the definition matches the target
-            if frWrd == self.target_word:
-                entry = f'{frWrd} ({pos})'
-                if entry not in def_dict:
-                    def_dict[entry] = [definitions]
-                else:
-                    def_dict[entry].append(definitions)
-        # Now we want to enumerate the definitions by each word group
-        def_dict_enum = {}
-        for target_word, list_of_defs in def_dict.items():
-            def_str = ""
-            for idx, definition in enumerate(list_of_defs, start=1):
-                def_str += f'''{idx}. {", ".join(definition)}'''
-                if idx < len(list_of_defs):
-                    def_str += '; '
-            if target_word not in def_dict_enum:
-                def_dict_enum[target_word] = def_str
-            else:
-                def_dict_enum[target_word].append(def_str)
+            first = tr_list[0]
+            fr_td = first.find("td", class_="FrWrd")
+            if not fr_td or not fr_td.strong or not fr_td.em:
+                continue
+            key = f"{fr_td.strong.text.strip()} ({fr_td.em.text.strip()})"
+            raw_defs.setdefault(key, [])
 
-        return def_dict
-    
+            for tr in tr_list:
+                tds = tr.find_all("td")
+                if len(tds) < 3:
+                    continue
+
+                dsense = tds[1].find("span", class_="dsense")
+                prefix = f"({dsense.get_text(strip=True).strip('()')}) " if dsense else ""
+
+                # first real text node in the English cell
+                gloss = None
+                for node in tds[2].contents:
+                    if isinstance(node, NavigableString) and node.strip():
+                        gloss = node.strip()
+                        break
+                if not gloss:
+                    continue
+
+                if "⇒" in gloss:
+                    gloss = gloss.split("⇒", 1)[0].strip()
+
+                raw_defs[key].append(f"{prefix}{gloss}")
+
+        # 2) if we found nothing at all…
+        if not raw_defs:
+            if is_inflection_only:
+                # e.g. “eusse”-only pages
+                return ""
+            raise DefinitionNotFoundError("Definition does not exist")
+
+        # 3) dedupe & enumerate the ones we did find
+        final_defs: dict[str, str] = {}
+        for key, senses in raw_defs.items():
+            seen: list[str] = []
+            for s in senses:
+                if s not in seen:
+                    seen.append(s)
+            enumerated = "; ".join(f"{i+1}. {s}" for i, s in enumerate(seen))
+            final_defs[key] = enumerated
+
+        return final_defs
+
+
     def get_examples(self) -> list[str]:
         '''Fetches example sentences from WordReference, returns a list of strings'''
         example_sentences = []
@@ -179,8 +302,10 @@ class WordReference:
             for tr in tr_list:
                 tds = tr.find_all('td')
                 for td in tds:
-                    if 'FrEx' in td.get('class', []):   
-                        example_sentences.append(td.get_text())  
+                    if 'FrEx' in td.get('class', []): 
+                        if td.get_text() not in example_sentences:
+                            # if self.target_word in td.get_text():
+                            example_sentences.append(td.get_text())  
         return example_sentences
     
     def to_dict(self) -> dict:
@@ -315,4 +440,95 @@ class Wiktionnaire:
                     if item.name is None or item.name not in ('span', 'ul'):
                         if isinstance(item, Tag):
                             def_str += item.get_text().replace('\n',' ')
-            
+                        else:
+                            def_str += item.replace('\n',' ')
+                if def_str:
+                    def_list.append(def_str.strip())
+            def_dict[f'''{self.target_word} {genders[li_list_idx]}'''] = def_list
+        # Now we want to enumerate the definitions by each word group
+        def_dict_enum = {}
+        for target_word, list_of_defs in def_dict.items():
+            def_str = ''
+            for idx, definition in enumerate(list_of_defs, start=1):
+                def_str += f'''{idx}. {definition}'''
+                if idx < len(list_of_defs):
+                    def_str = def_str[:-1] + '; '
+                def_dict_enum[target_word] = def_str
+        return def_dict
+
+
+    def get_examples(self) -> dict[str, list[str]]:   
+        '''Fetches the definitions'''
+        example_dict = {}
+        ''' 
+        <ol> is the master tag for definitions, but also supplemental info like translations, composite forms, etc.
+        We only want the definitions of each word, whose <ol> tags appear at the top. 
+        Normally, we'd just take the first <ol> tag, but some words like 'pendule' have different genders and thus different meanings (lets call these 'word groups').
+        So, get the length of the genders list and then use that to splice the ol_all list.
+        '''
+        genders = self.get_genders()
+        definition_group_count = len(genders)
+        ol_all = self.article_head.find_all('ol')[:definition_group_count]
+        list_of_li_groups = []
+        '''
+        We want to group the <li> tags by their <ol> parent, each occurence of which should be a unique word group (i.e. [<tags> for 'pendule (nm)', <tags> for 'pendule (nf)'])
+        That way, we can keep the definitions of each word separate
+        '''
+        for ol in ol_all:
+            list_of_li_groups.append(ol.find_all('li'))
+        for li_list_idx, li_list in enumerate(list_of_li_groups):
+            example_list = []
+            for li in li_list:
+                example_str = ""
+                li_contents = li.contents
+                for item in li_contents:
+                    # Filter out the example sentences (contained in <span> and <ul> tags)
+                    if item.name in ('span', 'ul'):
+                        example_str += item.get_text().replace('\xa0','')
+                if example_str:
+                    example_list.append(example_str.strip())
+            example_dict[f'''{self.target_word} {genders[li_list_idx]}'''] = example_list
+        # Now we want to enumerate the definitions by each word group
+        example_dict_enum = {}
+        for target_word, list_of_defs in example_dict.items():
+            example_str = ''
+            for idx, definition in enumerate(list_of_defs, start=1):
+                example_str += f'''{idx}. {definition}'''
+                if idx < len(list_of_defs):
+                    example_str = example_str[:-1] + '; '
+                example_dict_enum[target_word] = example_str
+        return example_dict
+    
+    def to_dict(self) -> dict:
+        '''Aggregate all collected data into a dictionary'''
+        # inflections = self.get_inflections()
+        examples = self.get_examples()
+        audio = self.get_audio()
+        pronunciations = self.get_pronunciations()
+        definitions = self.get_definitions()
+
+        # Aggregate all collected data into a dictionary
+        return {
+            "target_word": self.target_word,
+            "definitions": definitions,
+            "pronunciations": pronunciations,
+            # "inflections": inflections,
+            "examples": examples,
+            "audio": audio
+        }
+
+# pp = pprint.PrettyPrinter(indent=4)
+
+# pendule_wr = WordReference('pendule')
+# pp.pprint(pendule_wr.get_definitions())
+
+# pomme = WordReference('pendule')
+# pp.pprint(pomme.to_dict())
+# pomme.to_dict()
+
+# target = 'pomme'
+# soup = get_soup(target)
+# # data = get_wr_french(soup)
+# inflections = get_wr_inflections(soup, target)
+# audio = get_wr_audio(soup)
+
