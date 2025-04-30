@@ -367,13 +367,30 @@ class Wiktionnaire:
 
         if self.p_pron:
             for p in self.p_pron:
-                children = p.children
-                values = list(chain(*([c.attrs.values() for c in children if isinstance(c, Tag)])))
-                parts = values[-1]
-                parts_json = json.loads(parts)
-                params = parts_json['parts'][0]['template']['params']
-                if '1' in params:
-                    pronunciations.append(params['1']['wt'])
+                ipas = [span.get_text().strip('\\') for span in p.select('span.API')]
+                for ipa in ipas:
+                    if ipa not in pronunciations:
+                        pronunciations.append(ipa)
+                # children = p.children
+                # values = list(chain(*([c.attrs.values() for c in children if isinstance(c, Tag)])))
+                # # print(values)
+                # tag = p.find("a", {"data-mw": True})
+                # print(tag)
+                # raw = tag["data-mw"]
+                # mw = json.loads(raw)
+                # params = mw["parts"][0]["template"]["params"]
+                # ipa = params.get("1", {}).get("wt")
+                # pronunciations.append(ipa)
+                # print(ipa)
+                # for v in values:
+                    
+                #     if isinstance(v, set):
+                #         print(v)
+                # parts = values[-1]
+                # parts_json = json.loads(parts)
+                # params = parts_json['parts'][0]['template']['params']
+                # if '1' in params:
+                #     pronunciations.append(params['1']['wt'])
         return pronunciations
 
     def get_genders(self) -> list[str]:
@@ -456,7 +473,6 @@ class Wiktionnaire:
                 def_dict_enum[target_word] = def_str
         return def_dict
 
-
     def get_examples(self) -> dict[str, list[str]]:   
         '''Fetches the definitions'''
         example_dict = {}
@@ -517,10 +533,10 @@ class Wiktionnaire:
             "audio": audio
         }
 
-# pp = pprint.PrettyPrinter(indent=4)
+pp = pprint.PrettyPrinter(indent=4)
 
-# pendule_wr = WordReference('pendule')
-# pp.pprint(pendule_wr.get_definitions())
+pendule_wr = Wiktionnaire('pendule')
+pp.pprint(pendule_wr.to_dict())
 
 # pomme = WordReference('pendule')
 # pp.pprint(pomme.to_dict())
